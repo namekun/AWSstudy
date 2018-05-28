@@ -1,0 +1,168 @@
+#
+# Tomcat Server 설치
+#
+
+* Tomcat 설치할 EC2 인스턴스에 PuTTY 등으로 접속
+
+* 자바 버전 확인
+
+[ec2-user@ip-172-31-1-160 ~]$ java -version
+java version "1.7.0_181"
+OpenJDK Runtime Environment (amzn-2.6.14.1.79.amzn1-x86_64 u181-b00)
+OpenJDK 64-Bit Server VM (build 24.181-b00, mixed mode)
+
+
+* 자바 설치
+
+[ec2-user@ip-172-31-1-160 ~]$ sudo yum -y install java-1.8.0-openjdk-devel
+~출력 생략~
+
+
+* 자바 전환
+
+[ec2-user@ip-172-31-1-160 ~]$ sudo alternatives --config java
+
+There are 2 programs which provide 'java'.
+
+  Selection    Command
+-----------------------------------------------
+*+ 1           /usr/lib/jvm/jre-1.7.0-openjdk.x86_64/bin/java
+   2           /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java
+
+Enter to keep the current selection[+], or type selection number: 2 <<== 입력
+
+
+* 자바 버전 재확인
+
+[ec2-user@ip-172-31-1-160 ~]$ java -version
+openjdk version "1.8.0_171"
+OpenJDK Runtime Environment (build 1.8.0_171-b10)
+OpenJDK 64-Bit Server VM (build 25.171-b10, mixed mode)
+
+
+* Tomcat 8 설치
+
+[ec2-user@ip-172-31-1-160 ~]$ sudo yum -y install tomcat8
+
+
+#
+# JDBC 드라이버 설치
+#
+
+* JDBC 드라이버 설치
+
+[ec2-user@ip-172-31-1-160 ~]$ sudo yum -y install mysql-connector-java
+~출력 생략~
+
+
+* mysql-connector-java.jar를 Tomcat 8 설치 디렉터리 아래 lib 디렉터리에 복사
+
+[ec2-user@ip-172-31-1-160 ~]$ sudo cp /usr/share/java/mysql-connector-java.jar /usr/share/tomcat8/lib/
+
+
+#
+# 웹 애플리케이션 배포
+#
+
+* 이클립스 JSP 실행환경 만들기
+  - 원문보기: http://mainia.tistory.com/2449
+
+
+* 샘플 war 파일 이클립스에 임포트
+<<이클립스>>
+  [File] -> [Import...]
+
+    <Select>
+      Select an import wizard: war -> (WAR file) -> [Next]
+
+    <WAR Import>
+      WAR file: -> [Browse...] -> aws-rds-sample/WebAPSample.war 선택
+      Target runtime: -> [New...]
+        <New Server Runtime Environment>
+          Select the type of runtime environment: (Apache/Apache Tomcat v8.0) -> [Next]
+            <톰캣8 서버 설치 혹은 기존의 톰캣8 지정>
+      [Finish]
+
+
+* AWS RDS 데이터베이스 접속 정보 수정
+<<이클립스>>
+  <Data Source Explorer 탭>
+    [Database Connections]
+      [Amazon RDS DB: sampledb - Asia Pacific (Seoul) (MySQL v. 5.6.0)] 우클릭 -> [Properties...] -> [Driver Properties] -> URL: 의 값을 복사
+
+  <WebAPSample 프로젝트>
+    [WebContext]
+      [META-INF]
+        context.xml 더블 클릭 -> [Source 탭] 클릭
+          url="..." 의 ...을 복사한 URL로 붙여넣기
+
+
+* 샘플 war 파일 익스포트
+<<이클립스>>
+  [File] -> [Export...]
+
+    <Select>
+      Select an import wizard: war -> (WAR file) -> [Next]
+
+    <WAR Import>
+      Destination: -> [Browse...] -> (적절한 경로 지정)
+      [Finish]
+
+
+* 샘플 애플리케이션 EC2에 배포
+<<WinSCP>>
+  : 익스포트했던 war 파일을 EC2에 업로드
+
+<<EC2>>
+  : war 파일을 EC2의 Tomcat8 설치 디렉터리 아래의 webapps 디렉터리로 복사
+
+[ec2-user@ip-172-31-16-58 ~]$ sudo cp WebAPSample.war /usr/share/tomcat8/webapps/
+
+
+* Tomcat 8 기동
+
+[ec2-user@ip-172-31-16-58 ~]$ sudo service tomcat8 start
+
+
+* Tomcat 8 자동 기동 설정
+
+[ec2-user@ip-172-31-16-58 ~]$ sudo chkconfig tomcat8 on
+
+
+* Tomcat 8 관리 GUI 툴 설치
+
+[ec2-user@ip-172-31-16-58 ~]$ sudo yum -y install tomcat8-admin-webapps
+
+
+* Tomcat 8 관리 GUI 툴을 위한 관리자 권한의 사용자 생성
+  - /usr/share/tomcat8/conf/tomcat-users.xml 파일 편집
+
+[ec2-user@ip-172-31-16-58 ~]$ sudo vi /usr/share/tomcat8/conf/tomcat-users.xml
+
+<!-- <role rolename="manager"/> --> 을 찾은 후 아래와 같이 수정
+
+<role rolename="manager"/>
+<user username="tomcat" password="s3cret" roles="manager-gui"/>
+
+
+* Tomcat 8 관리 GUI 툴 실행을 위해 /usr/share/tomcat8/webapps/manager/META-INF/context.xml 에서 <Valve> 태그를 주석 처리
+
+[ec2-user@ip-172-31-16-58 ~]$ sudo vi /usr/share/tomcat8/webapps/manager/META-INF/context.xml
+
+<Context antiResourceLocking="false" privileged="true" >
+<!--
+  <Valve className="org.apache.catalina.valves.RemoteAddrValve"
+         allow="127\.\d+\.\d+\.\d+|::1|0:0:0:0:0:0:0:1" />
+-->
+
+
+* Tomcat 8 재기동
+
+[ec2-user@ip-172-31-16-58 ~]$ sudo service tomcat8 restart
+
+
+* 웹 브라우저로 접속하여 Tomcat 8 기동 확인
+
+http://EC2-public-dns:8080/manager
+
+
